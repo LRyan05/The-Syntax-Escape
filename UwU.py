@@ -2,6 +2,15 @@ import pygame
 from pygame.locals import *
 import os
 
+# Game States
+MENU = 0
+PLAYING = 1
+QUIZ = 2
+
+game_state = MENU
+selected_language = None
+selected_level = 1
+
 pygame.init()
 
 clock = pygame.time.Clock()
@@ -12,6 +21,7 @@ screen_height = 1000
 
 screen = pygame.display.set_mode((screen_width, screen_height))
 pygame.display.set_caption('THE-SYNTAX-ESCAPE')
+
 
 # --- DEFINE GAME VARIABLES ---
 tile_size = 40
@@ -270,9 +280,9 @@ class Player(pygame.sprite.Sprite):  # ← ADD THIS
 
 
 class World():
-    def __init__(self, data):
+    def __init__(self, data, difficulty_level):
         self.tile_list = []
-
+        self.difficulty = difficulty_level
         #load images
         grass_img = pygame.image.load('GRAPHICS/TILES/Tile_01.png').convert_alpha()
         tile_img = pygame.image.load('GRAPHICS/TILES/Tile_02.png').convert_alpha()
@@ -304,8 +314,10 @@ class World():
                     tile = (img, img_rect)
                     self.tile_list.append(tile)
                 if tile == 4:
-                    slime = Enemy(col_count * tile_size, row_count * tile_size )
-                    slime_group.add(slime)
+        # Spawn more enemies based on difficulty
+                    for _ in range(self.difficulty): 
+                        slime = Enemy(col_count * tile_size, row_count * tile_size)
+                        slime_group.add(slime)
                 col_count += 1
             row_count +=1
 
@@ -471,67 +483,104 @@ class Enemy(pygame.sprite.Sprite):
         raw_image = animation_frames[int(self.current_frame)]
         self.image = pygame.transform.flip(raw_image, True, False) if self.direction == 1 else raw_image
             
-            
+class Menu:
+    
+    def __init__(self):
+        self.languages = ["Python", "Java", "JavaScript", "HTML", "CSS"]
+        self.levels = list(range(1, 11))
+        self.font = pygame.font.SysFont('Arial', 30)
+
+    def draw(self, screen):
+        screen.fill((20, 20, 20)) # Background
+        title = self.font.render("SELECT LANGUAGE & LEVEL", True, (255, 255, 255))
+        screen.blit(title, (300, 50))
+
+        # Draw Language Buttons
+        for i, lang in enumerate(self.languages):
+            rect = pygame.Rect(100, 150 + i*60, 200, 50)
+            pygame.draw.rect(screen, (0, 255, 0), rect, 2)
+            text = self.font.render(lang, True, (255, 255, 255))
+            screen.blit(text, (110, 160 + i*60))
+
+    def handle_click(self, pos):
+        global game_state, selected_language
+        # Simple collision check for buttons
+        for i, lang in enumerate(self.languages):
+            rect = pygame.Rect(100, 150 + i*60, 200, 50)
+            if rect.collidepoint(pos):
+                selected_language = lang
+                game_state = PLAYING
+                print(f"Started {selected_language} Level {selected_level}")
+
+
 bg_manager = BackgroundManager()
 player = Player(-5, screen_height - 350)
 
 slime_group = pygame.sprite.Group()
 
+menu = Menu()
 
-world = World (world_data)
 
 run = True
 while run:
     clock.tick(fps)
     
-    # --- 1. HANDLE INPUT (Always runs) ---
+  # 1. EVENT HANDLING
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             run = False
+            
+        # Handle Menu clicks only when in Menu
+        if game_state == MENU:
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                menu.handle_click(pygame.mouse.get_pos())
+                # Re-initialize world based on selection
+                world = World(world_data, selected_level)
+
+        # Handle Reset only when in PLAYING
+        elif game_state == PLAYING:
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r and game_over != 0:
+                    game_over = 0
+                    player.rect.x = -5
+                    player.rect.y = screen_height - 350
+                    player.respawn_time = pygame.time.get_ticks()
+                    slime_group.empty()
+                    for x, y in slime_positions:
+                        slime = Enemy(x, y)
+                        slime_group.add(slime)
+                    player.is_dying = False
+
+    # Debugging: Uncomment the line below to check your state in the terminal
+    # print(f"Current State: {game_state}")
+
+    # 2. UPDATE LOGIC (Gatekept by Game State)
+    if game_state == PLAYING:
+        if game_over == 0:
+            game_over = player.update(world, game_over)
+            if not player.is_dying:
+                slime_group.update(world)
+    
+    # 3. DRAWING (Gatekept by Game State)
+    screen.fill((0, 0, 0)) # Clear everything first
+
+    if game_state == MENU:
+        menu.draw(screen) # This must be indented!
         
-        # Reset logic (Works even if game_over is -1)
-        if event.type == pygame.KEYDOWN:
-            # 2. Only THEN check for the specific key
-            if event.key == pygame.K_r and game_over != 0:
-                game_over = 0
-                player.rect.x = -5
-                player.rect.y = screen_height - 350
-                player.respawn_time = pygame.time.get_ticks() # Start grace period
-                
-                # Clear and recreate enemies
-                slime_group.empty()
-                for x, y in slime_positions:
-                    slime = Enemy(x, y)
-                    slime_group.add(slime)
-                
-                player.is_dying = False
+    elif game_state == PLAYING:
+        bg_manager.draw_bg(screen)
+        world.draw()
+        
+        for enemy in slime_group:
+            visual_offset_y = -35
+            screen.blit(enemy.image, (enemy.rect.x, enemy.rect.y - visual_offset_y))
+        
+        player.draw(screen)
+        
+        if game_over == -1:
+            font = pygame.font.SysFont('Arial', 40)
+            text = font.render('GAME OVER - Press R to Restart', True, (255, 255, 255))
+            screen.blit(text, (screen_width // 2 - 250, screen_height // 2))
 
-    # --- 2. UPDATE GAME LOGIC (Only runs if game is active) ---
-    if game_over == 0:
-        game_over = player.update(world, game_over)
-        # Only update slimes if the player is alive
-        if not player.is_dying:
-            slime_group.update(world)
-    
-    # --- 3. DRAW EVERYTHING (Always runs) ---
-    # Important: Clear the screen first so you don't get "ghost" trails
-    screen.fill((0, 0, 0)) 
-    
-    bg_manager.draw_bg(screen)
-    world.draw()
-    
-    for enemy in slime_group:
-        visual_offset_y = -35
-        screen.blit(enemy.image, (enemy.rect.x, enemy.rect.y - visual_offset_y))
-    
-    player.draw(screen)
-    
-    # Optional: Draw text when game over
-    if game_over == -1:
-        font = pygame.font.SysFont('Arial', 40)
-        text = font.render('GAME OVER - Press R to Restart', True, (255, 255, 255))
-        screen.blit(text, (screen_width // 2 - 250, screen_height // 2))
-                    
     pygame.display.update()
-
 pygame.quit()
