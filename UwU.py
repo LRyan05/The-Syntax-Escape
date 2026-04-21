@@ -62,7 +62,7 @@ WORLD_DATA = [
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,0],
     [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,2,2],  # row 19 – gate at col 24
-    [0,0,0,0,0,0,0,0,0,0,0,0,4,0,4,0,0,0,2,2,2,2,2,2,2],  # row 20 – enemies
+    [0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,2,2,2,2,2,2,2],  # row 20 – enemies
     [2,2,2,2,0,0,0,0,3,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1],  # row 21
     [1,1,1,1,0,0,0,0,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  # row 22
     [1,1,1,1,0,0,0,0,3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],  # row 23
@@ -496,7 +496,7 @@ class Enemy(pygame.sprite.Sprite):
         # Rects
         self.image  = self.walk_frames[0]
         self.rect   = self.image.get_rect(topleft=(x, y))
-        self.hitbox = self.rect.inflate(-20, -20)
+        self.hitbox = self.rect.inflate(-60, -60)
 
     # ------------------------------------------------------------------
     def _load_sheet(self, path: str, cols: int, row: int) -> list[pygame.Surface]:
@@ -520,6 +520,9 @@ class Enemy(pygame.sprite.Sprite):
         # Gravity + tile collision
         self.vel_y = min(self.vel_y + self.GRAVITY, self.MAX_FALL_SPEED)
         self.rect.y += self.vel_y
+        
+        self.rect.x = int(self.pos_x)
+        self.hitbox.center = self.rect.center
 
         for _, tile_rect in world.tile_list:
             if tile_rect.colliderect(self.rect):
@@ -548,9 +551,9 @@ class Enemy(pygame.sprite.Sprite):
                 self.pos_x = left
                 self.direction = 1
 
-        self.rect.x        = int(self.pos_x)
+        self.rect.x = int(self.pos_x)
         # Offset hitbox downward to match the visual draw position (drawn at rect.y + VISUAL_OFFSET_Y)
-        self.hitbox.center = (self.rect.centerx + 30, self.rect.centery + self.VISUAL_OFFSET_Y + 30)
+        self.hitbox.center = (self.rect.centerx , self.rect.centery + self.VISUAL_OFFSET_Y)
 
         # Animation
         frames = self.walk_frames if self.state == "WALKING" else self.idle_frames
@@ -563,7 +566,7 @@ class Enemy(pygame.sprite.Sprite):
     # ------------------------------------------------------------------
     def draw(self, screen: pygame.Surface) -> None:
         screen.blit(self.image, (self.rect.x, self.rect.y + self.VISUAL_OFFSET_Y))
-
+        
 
 # =============================================================================
 # PIXEL FONT
@@ -602,7 +605,8 @@ class PixelFont:
         if char not in self._cache:
             path = self.LETTER_DIR + self.CHAR_MAP[char] + ".png"
             try:
-                img = pygame.image.load(path).convert_alpha()
+                img = pygame.image.load(path).convert()
+                img.set_colorkey((255, 255, 255))
                 self._cache[char] = pygame.transform.scale(
                     img, (self.glyph_size, self.glyph_size)
                 )
@@ -686,10 +690,12 @@ class Menu:
             logo_x = SCREEN_WIDTH // 2 - self.logo.get_width() // 2
             logo_y = 80
             screen.blit(self.logo, (logo_x, logo_y))
+            
+            vertical_offset = -16
             # Centre the title text inside the logo frame
             tw = self.title_font.text_width(title_text)
             tx = SCREEN_WIDTH // 2 - tw // 2
-            ty = logo_y + self.logo.get_height() // 2 - self.TITLE_GLYPH // 2
+            ty = (logo_y + self.logo.get_height() // 2 - self.TITLE_GLYPH // 2) + vertical_offset
             self.title_font.render(title_text, screen, tx, ty)
         else:
             # Fallback if logo is missing
